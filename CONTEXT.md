@@ -17,9 +17,10 @@
 | 5     | App shell, routing & notifications             | ✅ Done   |
 | 6     | Hosted zones list, search, pagination, CRUD    | ✅ Done   |
 | 7     | Zone detail page & DNS records CRUD            | ✅ Done   |
-| 8+    | Additional features & deployment               | 🔲 Pending |
+| 8     | Dashboard, "Coming soon" pages & nav QA        | ✅ Done   |
+| 9+    | Additional features & deployment               | 🔲 Pending |
 
-**Current phase**: 7 — Zone detail page, DNS records CRUD, per-type forms, and type filtering complete.
+**Current phase**: 8 — Dashboard with live stats, unified Coming Soon placeholders, and navigation QA complete.
 
 ---
 
@@ -69,6 +70,7 @@ scaler/
     │       └── use-records.ts       # useRecords hook
     ├── components/
     │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar
+    │   ├── ComingSoon.tsx      # Centered placeholder component with icon and back-link
     │   ├── hosted-zones/
     │   │   ├── HostedZonesTable.tsx
     │   │   ├── CreateEditZoneModal.tsx
@@ -91,15 +93,15 @@ scaler/
             │   └── [id]/
             │       └── page.tsx # Zone detail page (metadata + records table)
             ├── dashboard/
-            │   └── page.tsx    # Dashboard stub
+            │   └── page.tsx    # Live statistics dashboard & get started cards
             ├── health-checks/
-            │   └── page.tsx    # Health checks stub
+            │   └── page.tsx    # Health checks coming soon page
             ├── traffic-policies/
-            │   └── page.tsx    # Traffic policies stub
+            │   └── page.tsx    # Traffic policies coming soon page
             ├── resolver/
-            │   └── page.tsx    # Resolver stub
+            │   └── page.tsx    # Resolver coming soon page
             └── profiles/
-                └── page.tsx    # Profiles stub
+                └── page.tsx    # Profiles coming soon page
 ```
 
 ### Record Name Construction Convention
@@ -239,6 +241,12 @@ Browser → http://localhost:3000/api/*
 | GET    | /api/hosted-zones/{zone_id}/records/{record_id} | session_token | Return single record by ID (404 if missing)                                |
 | PUT    | /api/hosted-zones/{zone_id}/records/{record_id} | session_token | Update record (default records: ttl only; re-validates updated values)       |
 | DELETE | /api/hosted-zones/{zone_id}/records/{record_id} | session_token | Delete record (400 if is_default; 204 on success; 404 if missing)           |
+
+### Stats
+
+| Method | Path       | Auth          | Description                                                                     |
+|--------|------------|---------------|---------------------------------------------------------------------------------|
+| GET    | /api/stats | session_token | Aggregate counts: `{"hosted_zones": <int>, "records": <int>}` (requires auth)  |
 
 ---
 
@@ -433,6 +441,36 @@ python -m app.seed
 | Symbol | Kind | Description |
 |--------|------|-------------|
 | `DeleteRecordModal({ visible, zoneId, record, onDismiss, onSuccess })` | component | Cloudscape confirmation modal calling `DELETE /api/hosted-zones/{zoneId}/records/{id}` |
+
+### `frontend/components/ComingSoon.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ComingSoon({ feature })` | component | Centered Cloudscape Container displaying info icon, unreleased notice, subtext, and navigation button back to `/hosted-zones` |
+
+### `frontend/app/(protected)/dashboard/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `DashboardPage()` | component | Dashboard overview querying `/api/stats`, rendering 3 summary cards (Hosted zones, DNS records, Name servers) and Get Started guidance |
+
+### `frontend/app/(protected)/health-checks/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `HealthChecksPage()` | component | Renders `<ComingSoon feature="Health checks" />` within ContentLayout |
+
+### `frontend/app/(protected)/traffic-policies/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `TrafficPoliciesPage()` | component | Renders `<ComingSoon feature="Traffic policies" />` within ContentLayout |
+
+### `frontend/app/(protected)/resolver/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ResolverPage()` | component | Renders `<ComingSoon feature="Resolver" />` within ContentLayout |
+
+### `frontend/app/(protected)/profiles/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ProfilesPage()` | component | Renders `<ComingSoon feature="Profiles" />` within ContentLayout |
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +
