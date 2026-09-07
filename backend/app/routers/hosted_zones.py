@@ -10,10 +10,11 @@ All routes require an active session (get_current_user).
 """
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth import get_current_user
+from app.bind_parser import parse_bind_zone
 from app.database import get_db
 from app.models import HostedZone, Record, User
 from app.schemas import (
@@ -22,6 +23,7 @@ from app.schemas import (
     HostedZoneUpdate,
     PaginatedHostedZones,
 )
+from app.validators.records import validate_record
 
 router = APIRouter(tags=["hosted-zones"])
 
@@ -133,3 +135,147 @@ def delete_zone(
     zone = _get_zone_or_404(zone_id, db)
     db.delete(zone)
     db.commit()
+
+
+# ─── POST /{zone_id}/import ───────────────────────────────────────────────────
+
+@router.post("/{zone_id}/import")
+async def import_zone_file(
+    zone_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """
+    Import DNS records from an uploaded BIND zone file.
+    Returns {"imported": N, "skipped": [<reasons>]}.
+    """
+    zone = _get_zone_or_404(zone_id, db)
+    contents = await file.read()
+    text = contents.decode("utf-8", errors="replace")
+
+    parsed_records = parse_bind_zone(text, default_origin=zone.name)
+    skipped = list(parsed_records.skipped)
+    imported_count = 0
+
+    for rec in parsed_records:
+        rec_name = rec["name"]
+        rec_type = rec["type"]
+        rec_ttl = rec["ttl"]
+        rec_values = rec["values"]
+
+        # Ensure name belongs to this zone
+        if rec_name != zone.name and not rec_name.endswith("." + zone.name):
+            skipped.append(f"Record '{rec_name}' does not belong to hosted zone '{zone.name}'")
+            continue
+
+        # Validate values using existing project validators
+        try:
+            validate_record(rec_type, rec_values)
+        except ValueError as exc:
+            skipped.append(f"Invalid {rec_type} record for '{rec_name}': {exc}")
+            continue
+
+        # Check for existing record
+        existing = (
+            db.query(Record)
+            .filter(
+                Record.hosted_zone_id == zone.id,
+                Record.name == rec_name,
+                Record.type == rec_type,
+            )
+            .first()
+        )
+
+        if existing:
+            if existing.is_default:
+                skipped.append(f"Cannot overwrite default {rec_type} record '{rec_name}'")
+                continue
+            existing.ttl = rec_ttl
+            existing.values = rec_values
+            imported_count += 1
+        else:
+            new_rec = Record(
+                hosted_zone_id=zone.id,
+                name=rec_name,
+                type=rec_type,
+                ttl=rec_ttl,
+                values=rec_values,
+                is_default=False,
+            )
+            db.add(new_rec)
+            imported_count += 1
+
+    db.commit()
+    return {"imported": imported_count, "skipped": skipped}
+
+
+# ─── GET /{zone_id}/export ────────────────────────────────────────────────────
+
+@router.get("/{zone_id}/export")
+def export_zone(
+    zone_id: int,
+    format: str = Query("bind", regex="^(bind|json)$"),
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    """
+    Export a hosted zone and its records as JSON or BIND-style zone file.
+    """
+    zone = _get_zone_or_404(zone_id, db)
+    records = (
+        db.query(Record)
+        .filter(Record.hosted_zone_id == zone.id)
+        .order_by(Record.name, Record.type)
+        .all()
+    )
+
+    if format == "json":
+        export_data = {
+            "zone": {
+                "id": zone.id,
+                "name": zone.name,
+                "comment": zone.comment,
+                "created_at": zone.created_at.isoformat() if zone.created_at else None,
+            },
+            "records": [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "type": r.type,
+                    "ttl": r.ttl,
+                    "values": r.values,
+                    "is_default": r.is_default,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in records
+            ],
+        }
+        return Response(
+            content=json.dumps(export_data, indent=2),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{zone.name}.json"'
+            },
+        )
+
+    # format == "bind"
+    lines = [
+        f"; BIND Zone file export for {zone.name}",
+        f"$ORIGIN {zone.name}.",
+        "$TTL 300",
+        "",
+    ]
+
+    for r in records:
+        for val in r.values:
+            lines.append(f"{r.name}. {r.ttl} IN {r.type} {val}")
+
+    return Response(
+        content="\n".join(lines) + "\n",
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zone.name}.zone"'
+        },
+    )
+

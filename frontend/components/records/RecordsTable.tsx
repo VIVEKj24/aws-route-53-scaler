@@ -16,6 +16,7 @@ import Popover from "@cloudscape-design/components/popover";
 import { useRecords, RecordItem } from "@/lib/hooks/use-records";
 import { CreateEditRecordModal } from "./CreateEditRecordModal";
 import { DeleteRecordModal } from "./DeleteRecordModal";
+import { BulkDeleteRecordsModal } from "./BulkDeleteRecordsModal";
 
 export interface RecordsTableProps {
   zoneId: number;
@@ -69,11 +70,13 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedItems, setSelectedItems] = useState<RecordItem[]>([]);
 
   // Modals state
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [recordToEdit, setRecordToEdit] = useState<RecordItem | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<RecordItem | null>(null);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -141,12 +144,33 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize) || 1;
 
   const handleSuccess = async () => {
+    setSelectedItems([]);
     await refetch();
   };
 
   return (
     <>
       <Table
+        selectionType="multi"
+        selectedItems={selectedItems}
+        onSelectionChange={({ detail }) =>
+          setSelectedItems(detail.selectedItems as RecordItem[])
+        }
+        ariaLabels={{
+          selectionGroupLabel: "DNS records selection",
+          allItemsSelectionLabel: ({ selectedItems: items }) =>
+            `${items.length} ${
+              items.length === 1 ? "record" : "records"
+            } selected`,
+          itemSelectionLabel: ({ selectedItems: items }, item) => {
+            const isSelected = items.some(
+              (i) => i.id === (item as RecordItem).id
+            );
+            return `${(item as RecordItem).name} is ${
+              isSelected ? "" : "not "
+            }selected`;
+          },
+        }}
         columnDefinitions={[
           {
             id: "name",
@@ -161,32 +185,69 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
             ),
           },
           {
-            id: "ttl",
-            header: "TTL",
-            cell: (item: RecordItem) => `${item.ttl}s`,
-          },
-          {
             id: "values",
-            header: "Value / Route traffic to",
+            header: "Values",
             cell: (item: RecordItem) => {
-              const fullText = (item.values || []).join(", ");
-              if (fullText.length > 45) {
+              const vals = item.values || [];
+              if (vals.length === 0) return "-";
+              if (vals.length === 1) {
                 return (
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "0.85rem",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {vals[0]}
+                  </span>
+                );
+              }
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: "0.85rem",
+                      maxWidth: "240px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      display: "inline-block",
+                    }}
+                  >
+                    {vals[0]}
+                  </span>
                   <Popover
                     dismissButton={false}
                     position="top"
                     size="medium"
-                    triggerType="text"
-                    content={<Box variant="p">{fullText}</Box>}
+                    triggerType="custom"
+                    content={
+                      <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                        <Box variant="h4" margin={{ bottom: "xs" }}>
+                          All {vals.length} values:
+                        </Box>
+                        <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+                          {vals.map((v, i) => (
+                            <li key={i} style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                              {v}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    }
                   >
-                    <span title={fullText} style={{ cursor: "pointer" }}>
-                      {fullText.slice(0, 42)}...
-                    </span>
+                    <Badge color="grey">{`+${vals.length - 1} more`}</Badge>
                   </Popover>
-                );
-              }
-              return <span>{fullText || "-"}</span>;
+                </div>
+              );
             },
+          },
+          {
+            id: "ttl",
+            header: "TTL (seconds)",
+            cell: (item: RecordItem) => item.ttl,
           },
           {
             id: "actions",
@@ -232,12 +293,21 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
             variant="h2"
             counter={data ? `(${data.total})` : undefined}
             actions={
-              <Button
-                variant="primary"
-                onClick={() => setCreateModalOpen(true)}
-              >
-                Create record
-              </Button>
+              <SpaceBetween direction="horizontal" size="xs">
+                {selectedItems.filter((r) => !r.is_default).length >= 2 && (
+                  <Button onClick={() => setBulkDeleteModalOpen(true)}>
+                    {`Delete selected (${
+                      selectedItems.filter((r) => !r.is_default).length
+                    })`}
+                  </Button>
+                )}
+                <Button
+                  variant="primary"
+                  onClick={() => setCreateModalOpen(true)}
+                >
+                  Create record
+                </Button>
+              </SpaceBetween>
             }
           >
             Records
@@ -336,6 +406,17 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
         record={recordToDelete}
         onDismiss={() => setRecordToDelete(null)}
         onSuccess={handleSuccess}
+      />
+
+      <BulkDeleteRecordsModal
+        visible={bulkDeleteModalOpen}
+        zoneId={zoneId}
+        records={selectedItems}
+        onDismiss={() => setBulkDeleteModalOpen(false)}
+        onSuccess={() => {
+          setSelectedItems([]);
+          handleSuccess();
+        }}
       />
     </>
   );

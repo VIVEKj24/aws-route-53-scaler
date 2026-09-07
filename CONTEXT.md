@@ -18,9 +18,10 @@
 | 6     | Hosted zones list, search, pagination, CRUD    | ✅ Done   |
 | 7     | Zone detail page & DNS records CRUD            | ✅ Done   |
 | 8     | Dashboard, "Coming soon" pages & nav QA        | ✅ Done   |
-| 9+    | Additional features & deployment               | 🔲 Pending |
+| 9     | Bonus features: Dark mode, Bulk delete, BIND   | ✅ Done   |
+| 10+   | Additional features & deployment               | 🔲 Pending |
 
-**Current phase**: 8 — Dashboard with live stats, unified Coming Soon placeholders, and navigation QA complete.
+**Current phase**: 9 — Bonus features (Dark Mode, Bulk Delete for zones and records, BIND Import/Export) complete.
 
 ---
 
@@ -46,10 +47,11 @@ scaler/
 │       ├── schemas.py       # Pydantic v2: *Out, *Create, *Update, Paginated*
 │       ├── auth.py          # hash_password, verify_password, create_session, get_current_user
 │       ├── seed.py          # Demo data seed (run: python -m app.seed from backend/)
+│       ├── bind_parser.py   # BIND zone file line-based parser (Phase 9)
 │       ├── routers/
 │       │   ├── __init__.py
 │       │   ├── auth.py          # POST /login, /logout; GET /me
-│       │   ├── hosted_zones.py  # GET / (list), POST / (create), GET/PUT/DELETE /{id}
+│       │   ├── hosted_zones.py  # GET / (list), POST / (create), GET/PUT/DELETE /{id}, import/export
 │       │   └── records.py       # GET / (list), POST / (create), GET/PUT/DELETE /{record_id}
 │       └── validators/
 │           ├── __init__.py
@@ -69,16 +71,18 @@ scaler/
     │       ├── use-hosted-zones.ts  # useHostedZones hook
     │       └── use-records.ts       # useRecords hook
     ├── components/
-    │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar
+    │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar + theme toggle
     │   ├── ComingSoon.tsx      # Centered placeholder component with icon and back-link
     │   ├── hosted-zones/
     │   │   ├── HostedZonesTable.tsx
     │   │   ├── CreateEditZoneModal.tsx
-    │   │   └── DeleteZoneModal.tsx
+    │   │   ├── DeleteZoneModal.tsx
+    │   │   └── BulkDeleteZonesModal.tsx
     │   └── records/
     │       ├── RecordsTable.tsx
     │       ├── CreateEditRecordModal.tsx
-    │       └── DeleteRecordModal.tsx
+    │       ├── DeleteRecordModal.tsx
+    │       └── BulkDeleteRecordsModal.tsx
     └── app/
         ├── layout.tsx          # Root layout; imports Cloudscape global styles, wraps Providers
         ├── providers.tsx       # NotificationProvider > AuthProvider wrapper
@@ -228,9 +232,11 @@ Browser → http://localhost:3000/api/*
 |--------|-----------------------------|---------------|----------------------------------------------------------------|
 | GET    | /api/hosted-zones           | session_token | Paginated list of hosted zones; optional `search` filter       |
 | POST   | /api/hosted-zones           | session_token | Create hosted zone and auto-seed default NS record (201)        |
-| GET    | /api/hosted-zones/{zone_id} | session_token | Return single hosted zone (404 if missing)                     |
-| PUT    | /api/hosted-zones/{zone_id} | session_token | Update comment on hosted zone (404 if missing)                 |
-| DELETE | /api/hosted-zones/{zone_id} | session_token | Delete zone and cascade delete its records (204)               |
+| GET    | /api/hosted-zones/{zone_id}        | session_token | Return single hosted zone (404 if missing)                     |
+| PUT    | /api/hosted-zones/{zone_id}        | session_token | Update comment on hosted zone (404 if missing)                 |
+| DELETE | /api/hosted-zones/{zone_id}        | session_token | Delete zone and cascade delete its records (204)               |
+| POST   | /api/hosted-zones/{zone_id}/import | session_token | Import BIND zone file multipart; returns `{"imported": N, "skipped": [...]}` |
+| GET    | /api/hosted-zones/{zone_id}/export | session_token | Export zone as JSON (`?format=json`) or BIND (`?format=bind`)  |
 
 ### Records
 
@@ -471,6 +477,27 @@ python -m app.seed
 | Symbol | Kind | Description |
 |--------|------|-------------|
 | `ProfilesPage()` | component | Renders `<ComingSoon feature="Profiles" />` within ContentLayout |
+
+### `backend/app/bind_parser.py`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `parse_bind_zone(text, default_origin, skipped_list)` | function | Line-based BIND zone file parser supporting $ORIGIN, $TTL, and comment stripping; returns `ParsedZoneList` with `.skipped` list |
+
+### `frontend/components/hosted-zones/BulkDeleteZonesModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `BulkDeleteZonesModal({ visible, zones, onDismiss, onSuccess })` | component | Confirmation modal listing selected zones; sequentially executes client-side DELETE calls and issues single summary notification |
+
+### `frontend/components/records/BulkDeleteRecordsModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `BulkDeleteRecordsModal({ visible, zoneId, records, onDismiss, onSuccess })` | component | Confirmation modal listing selected records (skipping defaults); sequentially executes client-side DELETE calls and issues single summary notification |
+
+### Phase 9 Bonus Items Status:
+- **1. Dark Mode** (✅ Completed): Cloudscape `applyMode(Mode.Dark)` / `applyMode(Mode.Light)`, TopNavigation utility button with `light-dark` icon, `localStorage` persistence under key `"theme"`, and inline anti-flash script in `RootLayout`.
+- **2. Bulk Operations** (✅ Completed): Enabled for both Hosted Zones and Records tables when 2+ rows are selected. Opens dedicated confirmation modal displaying selected item names. On confirm, loops individual client-side DELETE calls and posts a single summary flashbar notification. *(Note: A dedicated batch DELETE backend endpoint would be a future improvement for production scaling).*
+- **3. BIND Import/Export** (✅ Completed): `backend/app/bind_parser.py` handles BIND RFC line parsing and extracts records / skipped entries. `POST /api/hosted-zones/{id}/import` accepts multipart file uploads and inserts valid records. `GET /api/hosted-zones/{id}/export?format=json|bind` generates JSON or BIND zone files. Frontend provides an "Import" file-upload button and an "Export" ButtonDropdown on the zone detail page header.
+- **Skipped Items**: None. All 3 bonus features were fully implemented and verified.
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +

@@ -15,6 +15,7 @@ import Box from "@cloudscape-design/components/box";
 import { useHostedZones, HostedZone } from "@/lib/hooks/use-hosted-zones";
 import { CreateEditZoneModal } from "./CreateEditZoneModal";
 import { DeleteZoneModal } from "./DeleteZoneModal";
+import { BulkDeleteZonesModal } from "./BulkDeleteZonesModal";
 
 export function HostedZonesTable() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export function HostedZonesTable() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [zoneToEdit, setZoneToEdit] = useState<HostedZone | null>(null);
   const [zoneToDelete, setZoneToDelete] = useState<HostedZone | null>(null);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -171,6 +173,13 @@ export function HostedZonesTable() {
                 >
                   Delete
                 </Button>
+                {selectedItems.length >= 2 && (
+                  <Button
+                    onClick={() => setBulkDeleteModalOpen(true)}
+                  >
+                    {`Delete selected (${selectedItems.length})`}
+                  </Button>
+                )}
                 <Button
                   variant="primary"
                   onClick={() => setCreateModalOpen(true)}
@@ -254,6 +263,16 @@ export function HostedZonesTable() {
         zone={zoneToDelete}
         onDismiss={() => setZoneToDelete(null)}
         onSuccess={handleSuccess}
+      />
+
+      <BulkDeleteZonesModal
+        visible={bulkDeleteModalOpen}
+        zones={selectedItems}
+        onDismiss={() => setBulkDeleteModalOpen(false)}
+        onSuccess={() => {
+          setSelectedItems([]);
+          handleSuccess();
+        }}
       />
     </>
   );

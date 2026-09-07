@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useNotify } from "@/lib/notification-context";
@@ -8,12 +8,45 @@ import AppLayout from "@cloudscape-design/components/app-layout";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import SideNavigation from "@cloudscape-design/components/side-navigation";
 import Flashbar from "@cloudscape-design/components/flashbar";
+import { applyMode, Mode } from "@cloudscape-design/global-styles";
 
 export function AppLayoutShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { items } = useNotify();
   const pathname = usePathname();
   const router = useRouter();
+
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("theme");
+      const initialTheme = saved === "dark" ? "dark" : "light";
+      setTheme(initialTheme);
+      applyMode(initialTheme === "dark" ? Mode.Dark : Mode.Light);
+      if (initialTheme === "dark") {
+        document.documentElement.classList.add("awsui-dark-mode");
+      } else {
+        document.documentElement.classList.remove("awsui-dark-mode");
+      }
+    } catch {
+      // localStorage may fail in private mode
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try {
+      localStorage.setItem("theme", next);
+    } catch {}
+    applyMode(next === "dark" ? Mode.Dark : Mode.Light);
+    if (next === "dark") {
+      document.documentElement.classList.add("awsui-dark-mode");
+    } else {
+      document.documentElement.classList.remove("awsui-dark-mode");
+    }
+  };
 
   return (
     <div>
@@ -28,6 +61,14 @@ export function AppLayoutShell({ children }: { children: React.ReactNode }) {
             },
           }}
           utilities={[
+            {
+              type: "button",
+              iconName: "light-dark",
+              text: theme === "dark" ? "Light mode" : "Dark mode",
+              ariaLabel:
+                theme === "dark" ? "Switch to light mode" : "Switch to dark mode",
+              onClick: toggleTheme,
+            },
             {
               type: "menu-dropdown",
               text: user?.username || "admin@example.com",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import ContentLayout from "@cloudscape-design/components/content-layout";
@@ -12,7 +12,10 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Alert from "@cloudscape-design/components/alert";
 import Spinner from "@cloudscape-design/components/spinner";
 import Badge from "@cloudscape-design/components/badge";
+import Button from "@cloudscape-design/components/button";
+import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import { apiFetch, ApiError } from "@/lib/api";
+import { useNotify } from "@/lib/notification-context";
 import { HostedZone } from "@/lib/hooks/use-hosted-zones";
 import RecordsTable from "@/components/records/RecordsTable";
 
@@ -20,6 +23,12 @@ export default function ZoneDetailPage() {
   const params = useParams();
   const router = useRouter();
   const zoneId = params?.id as string;
+  const { notify } = useNotify();
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [zone, setZone] = useState<HostedZone | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,6 +57,85 @@ export default function ZoneDetailPage() {
         setLoading(false);
       });
   }, [zoneId]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/hosted-zones/${zoneId}/import`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to import zone file");
+      }
+
+      const data = await res.json();
+      if (data.skipped && data.skipped.length > 0) {
+        notify({
+          type: "warning",
+          content: `Imported ${data.imported} records (${data.skipped.length} skipped: ${data.skipped[0]})`,
+        });
+      } else {
+        notify({
+          type: "success",
+          content: `Successfully imported ${data.imported} records`,
+        });
+      }
+
+      setRefreshKey((prev) => prev + 1);
+      const updatedZone = await apiFetch<HostedZone>(`/api/hosted-zones/${zoneId}`);
+      setZone(updatedZone);
+    } catch (err: any) {
+      notify({
+        type: "error",
+        content: err?.message || "Failed to import zone file",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleExport = async ({ detail }: { detail: { id: string } }) => {
+    if (!zone) return;
+    setExporting(true);
+    try {
+      const res = await fetch(
+        `/api/hosted-zones/${zoneId}/export?format=${detail.id}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) {
+        throw new Error("Failed to export zone");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${zone.name}.${detail.id === "json" ? "json" : "zone"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      notify({
+        type: "error",
+        content: err?.message || "Export failed",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -127,6 +215,34 @@ export default function ZoneDetailPage() {
         <Header
           variant="h1"
           description={`Zone configuration and DNS records for ${zone.name}`}
+          actions={
+            <SpaceBetween direction="horizontal" size="xs">
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: "none" }}
+                accept=".zone,.txt,.bind,text/plain"
+                onChange={handleFileChange}
+              />
+              <Button
+                iconName="upload"
+                loading={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Import
+              </Button>
+              <ButtonDropdown
+                items={[
+                  { id: "bind", text: "BIND zone file (.zone)" },
+                  { id: "json", text: "JSON format (.json)" },
+                ]}
+                loading={exporting}
+                onItemClick={handleExport}
+              >
+                Export
+              </ButtonDropdown>
+            </SpaceBetween>
+          }
         >
           {zone.name}
         </Header>
@@ -175,7 +291,7 @@ export default function ZoneDetailPage() {
             </div>
           }
         >
-          <RecordsTable zoneId={zone.id} zoneName={zone.name} />
+          <RecordsTable key={refreshKey} zoneId={zone.id} zoneName={zone.name} />
         </Suspense>
       </SpaceBetween>
     </ContentLayout>
