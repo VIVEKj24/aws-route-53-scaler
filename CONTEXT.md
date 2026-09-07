@@ -16,9 +16,10 @@
 | 4     | DNS records CRUD API + per-type validation     | ✅ Done   |
 | 5     | App shell, routing & notifications             | ✅ Done   |
 | 6     | Hosted zones list, search, pagination, CRUD    | ✅ Done   |
-| 7+    | Record management & remaining features         | 🔲 Pending |
+| 7     | Zone detail page & DNS records CRUD            | ✅ Done   |
+| 8+    | Additional features & deployment               | 🔲 Pending |
 
-**Current phase**: 6 — Hosted zones list, search, pagination, and CRUD complete. DNS record management is Phase 7.
+**Current phase**: 7 — Zone detail page, DNS records CRUD, per-type forms, and type filtering complete.
 
 ---
 
@@ -62,9 +63,20 @@ scaler/
     ├── lib/
     │   ├── api.ts              # apiFetch<T> client + ApiError
     │   ├── auth-context.tsx    # AuthProvider & useAuth hook
-    │   └── notification-context.tsx # NotificationProvider & useNotify hook
+    │   ├── notification-context.tsx # NotificationProvider & useNotify hook
+    │   └── hooks/
+    │       ├── use-hosted-zones.ts  # useHostedZones hook
+    │       └── use-records.ts       # useRecords hook
     ├── components/
-    │   └── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar
+    │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar
+    │   ├── hosted-zones/
+    │   │   ├── HostedZonesTable.tsx
+    │   │   ├── CreateEditZoneModal.tsx
+    │   │   └── DeleteZoneModal.tsx
+    │   └── records/
+    │       ├── RecordsTable.tsx
+    │       ├── CreateEditRecordModal.tsx
+    │       └── DeleteRecordModal.tsx
     └── app/
         ├── layout.tsx          # Root layout; imports Cloudscape global styles, wraps Providers
         ├── providers.tsx       # NotificationProvider > AuthProvider wrapper
@@ -75,7 +87,9 @@ scaler/
         └── (protected)/
             ├── layout.tsx      # Route guard with spinner and AppLayout shell
             ├── hosted-zones/
-            │   └── page.tsx    # Hosted zones placeholder stub
+            │   ├── page.tsx    # Hosted zones list page
+            │   └── [id]/
+            │       └── page.tsx # Zone detail page (metadata + records table)
             ├── dashboard/
             │   └── page.tsx    # Dashboard stub
             ├── health-checks/
@@ -87,6 +101,15 @@ scaler/
             └── profiles/
                 └── page.tsx    # Profiles stub
 ```
+
+### Record Name Construction Convention
+- In the Create Record modal, users enter a subdomain prefix (e.g. `www`) or leave it blank / enter `@` for the apex domain.
+- The UI automatically constructs and displays the full FQDN:
+  - Blank or `@` $\rightarrow$ `zone.name` (apex, e.g. `example.com`).
+  - Subdomain prefix $\rightarrow$ `${subdomain}.${zone.name}` (e.g. `www.example.com`).
+  - If the user types a name already ending with the zone name suffix, it avoids double-appending.
+- The backend always receives and stores the full FQDN in `record.name`.
+- In Edit mode, default records (`is_default: true`) have an immutable name and immutable values (only TTL can be changed); user-created records allow editing name, TTL, and values.
 
 ### Frontend Auth & Routing Flow
 
@@ -385,6 +408,31 @@ python -m app.seed
 | Symbol | Kind | Description |
 |--------|------|-------------|
 | `DeleteZoneModal({ visible, zone, onDismiss, onSuccess })` | component | Cloudscape confirmation modal requiring exact domain name typing before enabling deletion via DELETE /api/hosted-zones/{id} |
+
+### `frontend/app/(protected)/hosted-zones/[id]/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ZoneDetailPage()` | component | Zone detail page rendering breadcrumbs, zone metadata summary box, and `<RecordsTable>` |
+
+### `frontend/lib/hooks/use-records.ts`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `useRecords({ zoneId, search, type, page, pageSize })` | hook | Queries `GET /api/hosted-zones/{zoneId}/records` with search, type, and pagination filters, returning `{ data, loading, error, refetch }` |
+
+### `frontend/components/records/RecordsTable.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `RecordsTable({ zoneId, zoneName })` | component | Cloudscape Table displaying DNS records with type badges, popovers for truncated values, per-row Edit and Delete actions (disabled for default NS), search, and Type select filter |
+
+### `frontend/components/records/CreateEditRecordModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `CreateEditRecordModal({ visible, zoneId, zoneName, recordToEdit, onDismiss, onSuccess })` | component | Cloudscape Modal + Form with dynamic per-type value editors (multi-line textarea, single-line CNAME, repeatable MX/SRV/CAA rows) and inline 400 error handling |
+
+### `frontend/components/records/DeleteRecordModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `DeleteRecordModal({ visible, zoneId, record, onDismiss, onSuccess })` | component | Cloudscape confirmation modal calling `DELETE /api/hosted-zones/{zoneId}/records/{id}` |
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +
