@@ -11,9 +11,10 @@
 |-------|-------------------------------|-----------|
 | 0     | Repository scaffold           | ✅ Done   |
 | 1     | Database models & migrations  | ✅ Done   |
-| 2+    | ...                           | 🔲 Pending |
+| 2     | Auth endpoints & sessions     | ✅ Done   |
+| 3+    | ...                           | 🔲 Pending |
 
-**Current phase**: 1 — data layer complete. No HTTP routers or auth yet (Phase 2+).
+**Current phase**: 2 — auth complete. CRUD routers for hosted zones and records are Phase 3+.
 
 ---
 
@@ -33,11 +34,15 @@ scaler/
 │   ├── venv/                # Python virtualenv (git-ignored)
 │   └── app/
 │       ├── __init__.py
-│       ├── main.py          # FastAPI app + CORS + GET /api/health + create_all on startup
+│       ├── main.py          # FastAPI app + CORS + health + routers wired
 │       ├── database.py      # Engine (SQLite), SessionLocal, Base, get_db()
 │       ├── models.py        # ORM: User, Session, HostedZone, Record
 │       ├── schemas.py       # Pydantic v2: *Out, *Create, *Update, Paginated*
-│       └── seed.py          # Demo data seed (run: python -m app.seed from backend/)
+│       ├── auth.py          # hash_password, verify_password, create_session, get_current_user
+│       ├── seed.py          # Demo data seed (run: python -m app.seed from backend/)
+│       └── routers/
+│           ├── __init__.py
+│           └── auth.py      # POST /login, /logout; GET /me
 │
 └── frontend/
     ├── next.config.ts       # transpilePackages, rewrite proxy /api/* → backend
@@ -125,11 +130,22 @@ Browser → http://localhost:3000/api/*
 
 ### Meta
 
-| Method | Path          | Auth | Description       |
-|--------|---------------|------|-------------------|
-| GET    | /api/health   | None | Liveness probe    |
+| Method | Path             | Auth          | Description                        |
+|--------|------------------|---------------|---------------------------------|
+| GET    | /api/health      | None          | Liveness probe                  |
 
-*(auth + CRUD endpoints added in Phase 2+)*
+### Auth
+
+| Method | Path              | Auth              | Description                                          |
+|--------|-------------------|-------------------|------------------------------------------------------|
+| POST   | /api/auth/login   | None              | Authenticate; sets `session_token` httpOnly cookie   |
+| POST   | /api/auth/logout  | session_token     | Delete session row; clears cookie                    |
+| GET    | /api/auth/me      | session_token     | Return current user (`{user:{id,username,display_name,is_active}}`) |
+
+**Cookie**: `session_token` — httpOnly, SameSite=lax, 24 h max-age  
+**Auth guard**: `get_current_user` dependency (401 if cookie missing/expired/invalid)
+
+*(CRUD endpoints for hosted zones + records added in Phase 3+)*
 
 ---
 
@@ -178,6 +194,21 @@ python -m app.seed
 ```
 **Idempotency**: exits early (no-op) if `users` table already has any row.  
 **Reset**: delete `backend/route53.db` then re-run the seed command.
+
+### `backend/app/auth.py`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `hash_password(plain)` | function | Returns bcrypt hash of *plain* via passlib |
+| `verify_password(plain, hashed)` | function | Returns True if *plain* matches *hashed* |
+| `create_session(db, user)` | function | Inserts Session row (uuid4 token, 24 h expiry), returns token str |
+| `get_current_user(request, db)` | dependency | Reads `session_token` cookie; 401 if missing/expired; returns User |
+
+### `backend/app/routers/auth.py`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `login(body, response, db)` | endpoint | POST /api/auth/login — verifies creds, sets cookie |
+| `logout(request, response, current_user, db)` | endpoint | POST /api/auth/logout — deletes Session row, clears cookie |
+| `me(current_user)` | endpoint | GET /api/auth/me — returns current user info |
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +

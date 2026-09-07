@@ -10,7 +10,7 @@ the model_validator so callers never see the raw JSON string.
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 # ─── Shared config ────────────────────────────────────────────────────────────
@@ -25,6 +25,12 @@ class UserOut(_ORMBase):
     id: int
     username: str
     is_active: bool
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def display_name(self) -> str:
+        """Derived from username until a dedicated column is added."""
+        return self.username
 
 
 class LoginRequest(BaseModel):
