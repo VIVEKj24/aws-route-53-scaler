@@ -8,9 +8,13 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiFetchOptions extends Omit<RequestInit, "body"> {
+  body?: BodyInit | Record<string, any> | null;
+}
+
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
   const normalizedPath = path.startsWith("/api")
     ? path
@@ -18,27 +22,32 @@ export async function apiFetch<T>(
 
   const headers = new Headers(options.headers);
 
-  let body = options.body;
-  if (body !== undefined && body !== null) {
+  let requestBody: BodyInit | null | undefined;
+  if (options.body !== undefined && options.body !== null) {
     const isPlainObject =
-      typeof body === "object" &&
-      !(body instanceof FormData) &&
-      !(body instanceof Blob) &&
-      !(body instanceof ArrayBuffer);
+      typeof options.body === "object" &&
+      !(options.body instanceof FormData) &&
+      !(options.body instanceof Blob) &&
+      !(options.body instanceof ArrayBuffer);
 
     if (isPlainObject) {
-      body = JSON.stringify(body);
+      requestBody = JSON.stringify(options.body);
       if (!headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");
       }
-    } else if (typeof body === "string" && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
+    } else if (typeof options.body === "string") {
+      requestBody = options.body;
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+    } else {
+      requestBody = options.body as BodyInit;
     }
   }
 
   const res = await fetch(normalizedPath, {
     ...options,
-    body,
+    body: requestBody,
     credentials: "include",
     headers,
   });

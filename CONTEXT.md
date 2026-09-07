@@ -15,9 +15,10 @@
 | 3     | Hosted zones CRUD API                          | ✅ Done   |
 | 4     | DNS records CRUD API + per-type validation     | ✅ Done   |
 | 5     | App shell, routing & notifications             | ✅ Done   |
-| 6+    | Frontend features & remaining                  | 🔲 Pending |
+| 6     | Hosted zones list, search, pagination, CRUD    | ✅ Done   |
+| 7+    | Record management & remaining features         | 🔲 Pending |
 
-**Current phase**: 5 — App shell, session-aware routing, and notification system complete. Hosted zones UI is Phase 6.
+**Current phase**: 6 — Hosted zones list, search, pagination, and CRUD complete. DNS record management is Phase 7.
 
 ---
 
@@ -363,7 +364,27 @@ python -m app.seed
 ### `frontend/app/(protected)/hosted-zones/page.tsx`
 | Symbol | Kind | Description |
 |--------|------|-------------|
-| `HostedZonesPage()` | component | Temporary Phase 5 stub displaying Cloudscape `Header` and `"Coming in the next phase."` |
+| `HostedZonesPage()` | component | Renders `<HostedZonesTable>` inside `<ContentLayout>` and `<Suspense>` boundary |
+
+### `frontend/lib/hooks/use-hosted-zones.ts`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `useHostedZones({ search, page, pageSize })` | hook | Queries `GET /api/hosted-zones` with server-side search and pagination, returning `{ data, loading, error, refetch }` |
+
+### `frontend/components/hosted-zones/HostedZonesTable.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `HostedZonesTable()` | component | Cloudscape Table displaying hosted zones with URL-synced debounced TextFilter, Pagination, CollectionPreferences, selection actions, and CRUD modal orchestration |
+
+### `frontend/components/hosted-zones/CreateEditZoneModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `CreateEditZoneModal({ visible, zoneToEdit, onDismiss, onSuccess })` | component | Cloudscape Modal + Form for creating (POST) or editing (PUT comment) a hosted zone with inline FormField errorText on 400/409 duplicate conflicts |
+
+### `frontend/components/hosted-zones/DeleteZoneModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `DeleteZoneModal({ visible, zone, onDismiss, onSuccess })` | component | Cloudscape confirmation modal requiring exact domain name typing before enabling deletion via DELETE /api/hosted-zones/{id} |
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +
