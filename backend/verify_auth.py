@@ -7,7 +7,7 @@ import http.cookiejar
 import json
 import urllib.request
 
-BASE = "http://localhost:8000"
+BASE = "http://127.0.0.1:8000"
 CJ = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CJ))
 

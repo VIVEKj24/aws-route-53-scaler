@@ -82,6 +82,7 @@ class RecordCreate(BaseModel):
 
 
 class RecordUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
     ttl: int | None = Field(None, ge=0)
     values: list[str] | None = None
 
