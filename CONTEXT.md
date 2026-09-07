@@ -14,9 +14,10 @@
 | 2     | Auth endpoints & sessions                      | ✅ Done   |
 | 3     | Hosted zones CRUD API                          | ✅ Done   |
 | 4     | DNS records CRUD API + per-type validation     | ✅ Done   |
-| 5+    | Frontend & remaining features                  | 🔲 Pending |
+| 5     | App shell, routing & notifications             | ✅ Done   |
+| 6+    | Frontend features & remaining                  | 🔲 Pending |
 
-**Current phase**: 4 — DNS records CRUD complete. Frontend integration is Phase 5+.
+**Current phase**: 5 — App shell, session-aware routing, and notification system complete. Hosted zones UI is Phase 6.
 
 ---
 
@@ -53,14 +54,57 @@ scaler/
 │
 └── frontend/
     ├── next.config.ts       # transpilePackages, rewrite proxy /api/* → backend
+    ├── middleware.ts        # Cookie-based session guard redirecting unauth to /login
     ├── .env.local.example   # Document env vars (copy → .env.local to use)
     ├── package.json
     ├── tsconfig.json
+    ├── lib/
+    │   ├── api.ts              # apiFetch<T> client + ApiError
+    │   ├── auth-context.tsx    # AuthProvider & useAuth hook
+    │   └── notification-context.tsx # NotificationProvider & useNotify hook
+    ├── components/
+    │   └── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar
     └── app/
-        ├── layout.tsx       # Root layout; imports Cloudscape global styles
-        ├── page.tsx         # Home page — Cloudscape <Button> smoke test
-        └── globals.css
+        ├── layout.tsx          # Root layout; imports Cloudscape global styles, wraps Providers
+        ├── providers.tsx       # NotificationProvider > AuthProvider wrapper
+        ├── page.tsx            # Root route — redirects to /hosted-zones
+        ├── globals.css
+        ├── login/
+        │   └── page.tsx        # Centered Cloudscape login form
+        └── (protected)/
+            ├── layout.tsx      # Route guard with spinner and AppLayout shell
+            ├── hosted-zones/
+            │   └── page.tsx    # Hosted zones placeholder stub
+            ├── dashboard/
+            │   └── page.tsx    # Dashboard stub
+            ├── health-checks/
+            │   └── page.tsx    # Health checks stub
+            ├── traffic-policies/
+            │   └── page.tsx    # Traffic policies stub
+            ├── resolver/
+            │   └── page.tsx    # Resolver stub
+            └── profiles/
+                └── page.tsx    # Profiles stub
 ```
+
+### Frontend Auth & Routing Flow
+
+1. **Unauthenticated Visit**:
+   - `middleware.ts` inspects incoming request for `session_token` cookie.
+   - If missing/empty and route is not `/login`, `/api/*`, or static assets, immediately redirects to `/login` (preventing content flash).
+2. **Authoritative State (`useAuth`)**:
+   - On initial mount, `AuthProvider` queries `/api/auth/me`.
+   - In `(protected)/layout.tsx`, while `loading` is true, a centered Cloudscape `Spinner` is rendered.
+   - If `/api/auth/me` returns 401/403 or fails, `user` is `null` and the layout redirects via `router.replace('/login')`.
+   - If `user` is authenticated, `<AppLayout>` renders the navigation and children.
+3. **Login (`/login/page.tsx`)**:
+   - User submits credentials; calls `login(username, password)`.
+   - `login()` performs `POST /api/auth/login` setting the `session_token` HTTP-only cookie, then refetches `/api/auth/me` and sets state.
+   - On success, routes to `/hosted-zones`. On failure, displays error alert with `ApiError.message`.
+4. **Sign Out**:
+   - TopNavigation utility menu "Sign out" calls `logout()`.
+   - `POST /api/auth/logout` revokes the session on the backend and clears the cookie.
+   - `logout()` sets `user = null` and routes to `/login`.
 
 ---
 
@@ -272,6 +316,54 @@ python -m app.seed
 | `create_record(zone_id, body, current_user, db)` | endpoint | POST /api/hosted-zones/{zone_id}/records — creates validated record |
 | `update_record(zone_id, record_id, body, current_user, db)` | endpoint | PUT /api/hosted-zones/{zone_id}/records/{record_id} — updates record |
 | `delete_record(zone_id, record_id, current_user, db)` | endpoint | DELETE /api/hosted-zones/{zone_id}/records/{record_id} — deletes record |
+
+### `frontend/lib/api.ts`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ApiError` | class | Custom error extending `Error` with `status: number` and `message: string` |
+| `apiFetch<T>(path, options)` | function | Client fetch wrapper with auto `/api` prefix, `credentials: "include"`, JSON headers/body formatting, and error parsing |
+
+### `frontend/lib/auth-context.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `AuthProvider({ children })` | component | Context provider managing `user` and `loading` state; exposes `login(username, password)` and `logout()` |
+| `useAuth()` | hook | Exposes `{ user, loading, login, logout }` to components |
+
+### `frontend/lib/notification-context.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `NotificationProvider({ children })` | component | Context provider holding Flashbar items in state with 5-second auto-dismissal for success messages |
+| `useNotify()` | hook | Exposes `notify({ type, content })`, `items`, and `dismiss(id)` |
+
+### `frontend/app/providers.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `Providers({ children })` | component | Client wrapper mounting `NotificationProvider` > `AuthProvider` around child components |
+
+### `frontend/components/AppLayout.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `AppLayoutShell({ children })` | component | Renders Cloudscape `TopNavigation` (Route 53 brand + user profile dropdown with Sign out), `SideNavigation` (all 6 sections), `Flashbar`, and `content` slot |
+
+### `frontend/app/(protected)/layout.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ProtectedLayout({ children })` | component | Renders centered `Spinner` while loading, redirects unauthenticated visitors to `/login`, and wraps authenticated content in `<AppLayoutShell>` |
+
+### `frontend/app/login/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `LoginPage()` | component | Centered Cloudscape `Form` with username/password inputs, demo credentials hint, error alert, and sign-in action |
+
+### `frontend/middleware.ts`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `middleware(request)` | function | Next.js Edge middleware performing early check for `session_token` cookie and redirecting to `/login` |
+
+### `frontend/app/(protected)/hosted-zones/page.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `HostedZonesPage()` | component | Temporary Phase 5 stub displaying Cloudscape `Header` and `"Coming in the next phase."` |
 
 **UI Framework note (Phase 0):**
 The project uses **Cloudscape Design System** (`@cloudscape-design/components` +
