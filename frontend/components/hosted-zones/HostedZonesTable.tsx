@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Table from "@cloudscape-design/components/table";
@@ -16,6 +16,7 @@ import { useHostedZones, HostedZone } from "@/lib/hooks/use-hosted-zones";
 import { CreateEditZoneModal } from "./CreateEditZoneModal";
 import { DeleteZoneModal } from "./DeleteZoneModal";
 import { BulkDeleteZonesModal } from "./BulkDeleteZonesModal";
+import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts-context";
 
 export function HostedZonesTable() {
   const router = useRouter();
@@ -34,6 +35,22 @@ export function HostedZonesTable() {
   const [zoneToEdit, setZoneToEdit] = useState<HostedZone | null>(null);
   const [zoneToDelete, setZoneToDelete] = useState<HostedZone | null>(null);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+
+  // Keyboard shortcut registration
+  const { registerHandlers } = useKeyboardShortcuts();
+  const filterContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unregister = registerHandlers({
+      onSearch: () => {
+        const input = filterContainerRef.current?.querySelector<HTMLInputElement>("input");
+        input?.focus();
+        input?.select();
+      },
+      onCreate: () => setCreateModalOpen(true),
+    });
+    return unregister;
+  }, [registerHandlers]);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -193,12 +210,14 @@ export function HostedZonesTable() {
           </Header>
         }
         filter={
-          <TextFilter
-            filteringText={searchInputValue}
-            filteringPlaceholder="Find hosted zone"
-            countText={`${data?.total ?? 0} matches`}
-            onChange={({ detail }) => setSearchInputValue(detail.filteringText)}
-          />
+          <div ref={filterContainerRef}>
+            <TextFilter
+              filteringText={searchInputValue}
+              filteringPlaceholder="Find hosted zone"
+              countText={`${data?.total ?? 0} matches`}
+              onChange={({ detail }) => setSearchInputValue(detail.filteringText)}
+            />
+          </div>
         }
         pagination={
           <Pagination

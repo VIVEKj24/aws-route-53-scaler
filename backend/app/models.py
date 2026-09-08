@@ -89,7 +89,7 @@ class HostedZone(Base):
 
 # ─── Record ───────────────────────────────────────────────────────────────────
 
-_VALID_TYPES = ("A", "AAAA", "CNAME", "MX", "NS", "PTR", "SOA", "SRV", "TXT")
+_VALID_TYPES = ("A", "AAAA", "CAA", "CNAME", "MX", "NS", "PTR", "SOA", "SRV", "TXT")
 
 class Record(Base):
     __tablename__ = "records"

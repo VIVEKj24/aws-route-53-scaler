@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Table from "@cloudscape-design/components/table";
 import Header from "@cloudscape-design/components/header";
@@ -17,6 +17,7 @@ import { useRecords, RecordItem } from "@/lib/hooks/use-records";
 import { CreateEditRecordModal } from "./CreateEditRecordModal";
 import { DeleteRecordModal } from "./DeleteRecordModal";
 import { BulkDeleteRecordsModal } from "./BulkDeleteRecordsModal";
+import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts-context";
 
 export interface RecordsTableProps {
   zoneId: number;
@@ -77,6 +78,22 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
   const [recordToEdit, setRecordToEdit] = useState<RecordItem | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<RecordItem | null>(null);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+
+  // Keyboard shortcut registration
+  const { registerHandlers } = useKeyboardShortcuts();
+  const filterContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unregister = registerHandlers({
+      onSearch: () => {
+        const input = filterContainerRef.current?.querySelector<HTMLInputElement>("input");
+        input?.focus();
+        input?.select();
+      },
+      onCreate: () => setCreateModalOpen(true),
+    });
+    return unregister;
+  }, [registerHandlers]);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -322,12 +339,14 @@ export function RecordsTable({ zoneId, zoneName }: RecordsTableProps) {
               alignItems: "center",
             }}
           >
-            <TextFilter
-              filteringText={searchInputValue}
-              filteringPlaceholder="Find record by name"
-              countText={`${data?.total ?? 0} matches`}
-              onChange={({ detail }) => setSearchInputValue(detail.filteringText)}
-            />
+            <div ref={filterContainerRef}>
+              <TextFilter
+                filteringText={searchInputValue}
+                filteringPlaceholder="Find record by name"
+                countText={`${data?.total ?? 0} matches`}
+                onChange={({ detail }) => setSearchInputValue(detail.filteringText)}
+              />
+            </div>
             <div style={{ minWidth: "160px" }}>
               <Select
                 selectedOption={selectedTypeOption}

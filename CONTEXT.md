@@ -21,7 +21,7 @@
 | 9     | Bonus features: Dark mode, Bulk delete, BIND   | ✅ Done   |
 | 10+   | Additional features & deployment               | 🔲 Pending |
 
-**Current phase**: 9 — Bonus features (Dark Mode, Bulk Delete for zones and records, BIND Import/Export) complete.
+**Current phase**: 9 — Bonus features complete. Post-phase fixes applied: CAA record type bug fix (Task 1), README rewrite (Task 2), Keyboard shortcuts (Task 3).
 
 ---
 
@@ -67,12 +67,14 @@ scaler/
     │   ├── api.ts              # apiFetch<T> client + ApiError
     │   ├── auth-context.tsx    # AuthProvider & useAuth hook
     │   ├── notification-context.tsx # NotificationProvider & useNotify hook
+    │   ├── keyboard-shortcuts-context.tsx # KeyboardShortcutsProvider & useKeyboardShortcuts hook
     │   └── hooks/
     │       ├── use-hosted-zones.ts  # useHostedZones hook
     │       └── use-records.ts       # useRecords hook
     ├── components/
-    │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar + theme toggle
+    │   ├── AppLayout.tsx       # Cloudscape TopNavigation + SideNavigation + Flashbar + theme toggle + global keyboard listener
     │   ├── ComingSoon.tsx      # Centered placeholder component with icon and back-link
+    │   ├── ShortcutsHelpModal.tsx # Keyboard shortcuts reference modal (opened by ?)
     │   ├── hosted-zones/
     │   │   ├── HostedZonesTable.tsx
     │   │   ├── CreateEditZoneModal.tsx
@@ -195,7 +197,7 @@ Browser → http://localhost:3000/api/*
 | id | INTEGER | PK |
 | hosted_zone_id | INTEGER | FK→hosted_zones.id ON DELETE CASCADE |
 | name | VARCHAR(255) | NOT NULL |
-| type | VARCHAR(10) | NOT NULL, CHECK IN (A,AAAA,CNAME,MX,NS,PTR,SOA,SRV,TXT) |
+| type | VARCHAR(10) | NOT NULL, CHECK IN (A,AAAA,CAA,CNAME,MX,NS,PTR,SOA,SRV,TXT) |
 | ttl | INTEGER | NOT NULL, default=300 |
 | values_json | TEXT | NOT NULL — JSON-encoded list[str] |
 | is_default | BOOLEAN | NOT NULL, default=False |
@@ -381,7 +383,7 @@ python -m app.seed
 ### `frontend/components/AppLayout.tsx`
 | Symbol | Kind | Description |
 |--------|------|-------------|
-| `AppLayoutShell({ children })` | component | Renders Cloudscape `TopNavigation` (Route 53 brand + user profile dropdown with Sign out), `SideNavigation` (all 6 sections), `Flashbar`, and `content` slot |
+| `AppLayoutShell({ children })` | component | Renders Cloudscape `TopNavigation` (Route 53 brand + user profile dropdown with Sign out + Shortcuts button), `SideNavigation` (all 6 sections), `Flashbar`, `ShortcutsHelpModal`, and global `keydown` listener handling `/`, `n`, `?`, `g+h`, `g+d` shortcuts |
 
 ### `frontend/app/(protected)/layout.tsx`
 | Symbol | Kind | Description |
@@ -492,6 +494,17 @@ python -m app.seed
 | Symbol | Kind | Description |
 |--------|------|-------------|
 | `BulkDeleteRecordsModal({ visible, zoneId, records, onDismiss, onSuccess })` | component | Confirmation modal listing selected records (skipping defaults); sequentially executes client-side DELETE calls and issues single summary notification |
+
+### `frontend/lib/keyboard-shortcuts-context.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `KeyboardShortcutsProvider({ children })` | component | Context provider holding `isHelpModalOpen` state and a `handlersRef` that page-level tables register `onSearch`/`onCreate` callbacks into |
+| `useKeyboardShortcuts()` | hook | Exposes `{ triggerSearch, triggerCreate, registerHandlers, isHelpModalOpen, setHelpModalOpen }` |
+
+### `frontend/components/ShortcutsHelpModal.tsx`
+| Symbol | Kind | Description |
+|--------|------|-------------|
+| `ShortcutsHelpModal({ visible, onDismiss })` | component | Cloudscape Modal listing all keyboard shortcuts with styled `<kbd>` chips; sequence shortcuts rendered as "g then h" |
 
 ### Phase 9 Bonus Items Status:
 - **1. Dark Mode** (✅ Completed): Cloudscape `applyMode(Mode.Dark)` / `applyMode(Mode.Light)`, TopNavigation utility button with `light-dark` icon, `localStorage` persistence under key `"theme"`, and inline anti-flash script in `RootLayout`.

@@ -5,6 +5,8 @@ Auth endpoints:
   POST /api/auth/logout  — delete session row, clear cookie
   GET  /api/auth/me      — return current user info
 """
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session as DBSession
 
@@ -48,6 +50,7 @@ def login(
         httponly=True,
         samesite="lax",
         max_age=_COOKIE_MAX_AGE,
+        secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
     )
     return {"user": UserOut.model_validate(user)}
 
