@@ -24,7 +24,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/hosted-zones");
+      router.replace("/dashboard");
     }
   }, [authLoading, user, router]);
 
@@ -36,7 +36,7 @@ export default function LoginPage() {
 
     try {
       await login(username, password);
-      router.replace("/hosted-zones");
+      router.replace("/dashboard");
     } catch (err: any) {
       setError(err?.message || "Login failed");
     } finally {
